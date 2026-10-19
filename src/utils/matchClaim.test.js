@@ -134,11 +134,41 @@ describe('parseClaimsResponse', () => {
           explanation: 'Should be dropped.',
           sourceUrl: 'http://example.com',
         },
+        {
+          id: 'missing-source',
+          claim: 'A claim without a source URL',
+          verdict: 'FACT',
+          explanation: 'Should remain available with no link.',
+        },
       ],
     });
 
-    assert.equal(claims.length, 1);
+    assert.equal(claims.length, 3);
     assert.equal(claims[0].id, 'ok');
+    assert.equal(claims[1].sourceUrl, '');
+  });
+
+  it('reads the Apps Script myth/fact schema', () => {
+    const claims = parseClaimsResponse({
+      ok: true,
+      sheetName: 'Sheet1',
+      headerRow: 2,
+      total: 70,
+      claims: [{
+        id: 'H001',
+        category: 'Hygiene',
+        myth: 'Washing hands with soap helps prevent illness.',
+        fact: 'true',
+        explanation: 'Soap helps remove germs.',
+        keywords: ['handwashing'],
+        source: 'CDC',
+        sourceUrl: 'https://www.cdc.gov/handwashing/',
+      }],
+    });
+
+    assert.equal(claims.length, 1);
+    assert.equal(claims[0].claim, 'Washing hands with soap helps prevent illness.');
+    assert.equal(claims[0].verdict, 'FACT');
   });
 
   it('throws on API failures and missing lists', () => {

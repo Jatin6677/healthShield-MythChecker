@@ -9,18 +9,24 @@
  */
 
 var ALLOWED_COLUMNS = [
-  'Myth_ID',
+  'ID',
+  'Claim',
+  'Alternative_Claims',
   'Category',
-  'Myth',
-  'Fact',
+  'Verdict',
   'Explanation',
-  'Keywords',
-  'Source'
+  'Source_Name',
+  'Source_URL',
+  'Verified',
+  'Last_Reviewed'
 ];
 
 function doGet() {
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+    if (!sheet) {
+      return jsonOutput({ ok: false, error: 'No sheet was found.' });
+    }
     var values = sheet.getDataRange().getValues();
 
     if (!values || values.length < 2) {
@@ -55,22 +61,25 @@ function doGet() {
 }
 
 function buildRecord(headers, row) {
-  var myth = String(getAllowedCell(headers, row, 'Myth') || '').trim();
-  var fact = String(getAllowedCell(headers, row, 'Fact') || '').trim();
+  var claim = String(getAllowedCell(headers, row, 'Claim') || getAllowedCell(headers, row, 'Myth') || '').trim();
+  var verdict = String(getAllowedCell(headers, row, 'Verdict') || getAllowedCell(headers, row, 'Fact') || '').trim().toUpperCase();
   var explanation = String(getAllowedCell(headers, row, 'Explanation') || '').trim();
+  var verified = String(getAllowedCell(headers, row, 'Verified') || '').trim().toUpperCase();
 
-  if (!myth || !fact || !explanation) {
+  if (!claim || !/^(FACT|MYTH|TRUE|FALSE)$/.test(verdict) || !explanation || !/^(YES|TRUE|1)$/.test(verified)) {
     return null;
   }
 
   return {
-    id: String(getAllowedCell(headers, row, 'Myth_ID') || myth),
+    id: String(getAllowedCell(headers, row, 'ID') || getAllowedCell(headers, row, 'Myth_ID') || claim),
+    claim: claim,
+    alternativeClaims: splitKeywords(getAllowedCell(headers, row, 'Alternative_Claims')),
     category: String(getAllowedCell(headers, row, 'Category') || 'General').trim() || 'General',
-    myth: myth,
-    fact: fact,
+    verdict: verdict === 'TRUE' ? 'FACT' : verdict === 'FALSE' ? 'MYTH' : verdict,
     explanation: explanation,
-    keywords: splitKeywords(getAllowedCell(headers, row, 'Keywords')),
-    source: String(getAllowedCell(headers, row, 'Source') || '').trim()
+    sourceName: String(getAllowedCell(headers, row, 'Source_Name') || getAllowedCell(headers, row, 'Source') || '').trim(),
+    sourceUrl: String(getAllowedCell(headers, row, 'Source_URL') || '').trim(),
+    lastReviewed: String(getAllowedCell(headers, row, 'Last_Reviewed') || '').trim()
   };
 }
 
@@ -108,7 +117,7 @@ function splitKeywords(value) {
   }
 
   return String(value)
-    .split(/[|,;/\n]+/)
+    .split(/[|;\n]+/)
     .map(function (part) {
       return part.trim();
     })

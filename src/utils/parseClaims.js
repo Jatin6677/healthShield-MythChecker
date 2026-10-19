@@ -14,13 +14,12 @@ function cleanRecord(raw) {
     return null;
   }
 
-  // Apps Script returns "myth", not "claim".
-  const claim = String(raw.myth || raw.claim || '').trim();
+  const claim = String(raw.claim || raw.myth || raw.Claim || raw.Myth || '').trim();
   const explanation = String(raw.explanation || '').trim();
 
   // Apps Script returns fact as "TRUE" or "FALSE".
   const rawFact = String(
-    raw.fact ?? raw.verdict ?? ''
+    raw.verdict ?? raw.Verdict ?? raw.fact ?? ''
   ).trim().toUpperCase();
 
   let verdict;
@@ -39,10 +38,10 @@ function cleanRecord(raw) {
 
   // Apps Script returns "source" and "sourceUrl".
   const source = String(
-    raw.source || raw.sourceName || ''
+    raw.sourceName || raw.source || raw.Source_Name || ''
   ).trim();
 
-  const rawSourceUrl = String(raw.sourceUrl || '').trim();
+  const rawSourceUrl = String(raw.sourceUrl || raw.Source_URL || '').trim();
 
   // Keep the claim even if its URL is missing or invalid.
   let sourceUrl = '';
@@ -74,7 +73,7 @@ function cleanRecord(raw) {
   // by the current Apps Script.
   const parsedAlternatives = Array.isArray(raw.alternativeClaims)
     ? raw.alternativeClaims
-    : splitAlternativeClaims(raw.alternativeClaims || '');
+    : splitAlternativeClaims(raw.alternativeClaims || raw.Alternative_Claims || '');
 
   const alternativeClaims = Array.isArray(parsedAlternatives)
     ? parsedAlternatives
@@ -83,7 +82,7 @@ function cleanRecord(raw) {
     : [];
 
   return {
-    id: String(raw.id || raw.Myth_ID || claim),
+    id: String(raw.id || raw.ID || raw.Myth_ID || claim),
     claim,
     alternativeClaims,
     keywords,

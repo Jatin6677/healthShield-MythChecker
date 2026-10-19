@@ -6,11 +6,11 @@ This app uses:
 
 - React + Vite for the website
 - CSS for the look
-- Google Sheets as the database
+- Google Sheets as the reviewed claim database
 - Google Apps Script as a **read-only** JSON API
-- Vercel to publish the website
+- A pretrained sentence-embedding model running in the browser to match alternate wording against reviewed claims
 
-There is **no** Node/Express server, **no** MongoDB, and **no** paid AI API.
+The embedding model never supplies a medical verdict. The verdict and explanation always come from a reviewed spreadsheet row. If no reviewed claim is sufficiently similar, the app returns NOT SURE. Model files are downloaded from Hugging Face on first use and cached by the browser.
 
 ## 1. Install and run
 
@@ -97,11 +97,12 @@ Do not paste the URL into React components.
 
 1. The website downloads only verified rows.
 2. It cleans capital letters, spaces, and punctuation.
-3. It looks for an **exact** cleaned match of `Claim` or an approved alternative phrase.
-4. Shared keywords are **not** enough. The word `water` will not match a long water fact.
-5. FACT or MYTH appears only when one suitable verified row matches.
-6. NOT SURE appears if nothing matches, or if two matching rows disagree.
-7. If the API fails, the app shows an error and a retry button. It does **not** use fake backup facts.
+3. It checks for an **exact** cleaned match of `Claim` or an approved alternative phrase.
+4. If there is no exact match, a pretrained sentence embedding model compares the user's wording to reviewed claims in the browser.
+5. Shared keywords alone are **not** enough. The word `water` will not match a long water fact.
+6. FACT or MYTH appears only when a sufficiently similar reviewed row matches.
+7. NOT SURE appears if nothing matches, or if similarly ranked matching rows disagree.
+8. The browser downloads the embedding model from Hugging Face the first time it is needed. It does **not** use fake backup facts.
 
 ## 6. Test the React application
 
@@ -150,8 +151,9 @@ A spreadsheet is free, easy for a Class 6 team, and a teacher can update facts w
 **3. What if a student types a claim that is not in the sheet?**  
 The app says NOT SURE. Guessing would be unsafe.
 
-**4. Why not use ChatGPT or a paid AI API?**  
-Paid models can make mistakes and cost money. This project only repeats teacher-verified rows.
+**4. Does the app send claims to an AI service?**
+
+No. It creates sentence embeddings in the browser with a pretrained Hugging Face model and compares them only with teacher-reviewed rows.
 
 **5. Is this medical advice?**  
 No. It is a school learning tool. A sick person should tell a trusted adult and see a real health worker.

@@ -1,13 +1,30 @@
+
 import { normalizeClaim } from './normalizeClaim.js';
 
+function getPhrases(record) {
+  const alternatives = Array.isArray(record.alternativeClaims)
+    ? record.alternativeClaims
+    : [];
+
+  return [record.claim, ...alternatives]
+    .filter((phrase) => typeof phrase === 'string')
+    .map(normalizeClaim)
+    .filter(Boolean);
+}
+
+function getVerdict(record) {
+  const verdict = String(record?.verdict || '')
+    .trim()
+    .toUpperCase();
+
+  return verdict === 'FACT' || verdict === 'MYTH'
+    ? verdict
+    : null;
+}
+
 /**
- * Try to match a student's typed claim to a verified row from Google Sheets.
- *
- * Important safety rules:
- * 1. We only accept an EXACT cleaned match of the main claim or an approved extra phrase.
- * 2. We do NOT count shared keywords. "water" should not match a long water fact.
- * 3. If two different rows match and they disagree (FACT vs MYTH), we say NOT SURE.
- * 4. If nothing matches, we say NOT SURE. We never invent a medical answer.
+ * Exact matching only.
+ * Similarity is not proof that two health claims mean the same thing.
  */
 export function matchClaim(userInput, claims) {
   const normalizedUser = normalizeClaim(userInput);
@@ -20,43 +37,47 @@ export function matchClaim(userInput, claims) {
     return { status: 'not_sure', reason: 'unmatched' };
   }
 
-  const matches = [];
-
-  for (const record of claims) {
+  const matches = claims.filter((record) => {
     if (!record || typeof record !== 'object') {
-      continue;
+      return false;
     }
 
-    const phrases = [record.claim, ...(record.alternativeClaims || [])];
-    const cleanedPhrases = phrases.map(normalizeClaim).filter(Boolean);
-
-    if (cleanedPhrases.includes(normalizedUser)) {
-      matches.push(record);
-    }
-  }
+    return getPhrases(record).includes(normalizedUser);
+  });
 
   if (matches.length === 0) {
     return { status: 'not_sure', reason: 'unmatched' };
   }
 
-  const verdicts = new Set(
-    matches.map((item) => String(item.verdict || '').trim().toUpperCase()),
-  );
+  // Do not issue a verdict if any matched record has an invalid verdict.
+  const verdicts = matches.map(getVerdict);
 
-  // Two trusted rows disagree, so a computer should not pick a winner.
-  if (verdicts.size > 1) {
-    return { status: 'not_sure', reason: 'ambiguous', matches };
+  if (verdicts.some((verdict) => verdict === null)) {
+    return {
+      status: 'not_sure',
+      reason: 'invalid_verdict',
+      matches,
+    };
   }
 
-  const verdict = [...verdicts][0];
-  if (verdict !== 'FACT' && verdict !== 'MYTH') {
-    return { status: 'not_sure', reason: 'unmatched' };
+  const uniqueVerdicts = new Set(verdicts);
+
+  if (uniqueVerdicts.size > 1) {
+    return {
+      status: 'not_sure',
+      reason: 'ambiguous',
+      matches,
+    };
   }
 
-  // Prefer the row whose main Claim column matches, if we have more than one.
+  // Prefer an exact match against the main claim.
   const best =
-    matches.find((item) => normalizeClaim(item.claim) === normalizedUser) ||
-    matches[0];
+    matches.find(
+      (record) => normalizeClaim(record.claim) === normalizedUser,
+    ) || matches[0];
 
-  return { status: 'matched', record: best };
+  return {
+    status: 'matched',
+    record: best,
+  };
 }

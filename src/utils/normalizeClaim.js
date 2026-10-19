@@ -1,11 +1,9 @@
+
 /**
- * Make a health claim easier to compare.
+ * Normalize a health claim for matching against the database.
  *
- * Why we do this:
- * "Vaccines cause autism!" and "vaccines  cause  autism"
- * should be treated as the same sentence.
- *
- * We do NOT guess the meaning. We only clean the letters.
+ * This function cleans text only. It does not determine
+ * whether a health claim is true or false.
  */
 export function normalizeClaim(text) {
   if (text === null || text === undefined) {
@@ -14,25 +12,63 @@ export function normalizeClaim(text) {
 
   return String(text)
     .toLowerCase()
+    // Normalize Unicode and remove accent marks.
     .normalize('NFKD')
-    // Turn punctuation into spaces so "covid-19" stays readable as words.
+    .replace(/[\u0300-\u036f]/g, '')
+    // Standardize common symbols and punctuation.
+    .replace(/&/g, ' and ')
     .replace(/[^a-z0-9\s]/g, ' ')
-    // Turn many spaces into one space.
+    // Normalize whitespace.
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 /**
- * Split the Alternative_Claims cell into a list of extra phrases.
- * In Google Sheets, students can separate phrases with | or ; or new lines.
+ * Split alternative claims stored in Google Sheets.
+ *
+ * Supported separators:
+ * | ; and new lines
+ *
+ * Each phrase is normalized for consistent comparison.
  */
 export function splitAlternativeClaims(value) {
-  if (!value) {
+  if (value === null || value === undefined || value === '') {
     return [];
   }
 
-  return String(value)
-    .split(/[|;/\n]+/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+  const items = Array.isArray(value)
+    ? value
+    : String(value).split(/[|;\n]+/);
+
+  return items
+    .map((part) => String(part).trim())
+    .filter(Boolean);
+}
+
+/**
+ * Tokenize a normalized claim into words.
+ */
+export function tokenizeClaim(text) {
+  const normalized = normalizeClaim(text);
+
+  return normalized
+    ? normalized.split(' ')
+    : [];
+}
+
+/**
+ * Check whether two normalized claims are exactly equivalent
+ * after text normalization.
+ *
+ * This is NOT semantic verification.
+ */
+export function areClaimsEquivalent(first, second) {
+  const normalizedFirst = normalizeClaim(first);
+  const normalizedSecond = normalizeClaim(second);
+
+  return (
+    normalizedFirst.length > 0 &&
+    normalizedSecond.length > 0 &&
+    normalizedFirst === normalizedSecond
+  );
 }
