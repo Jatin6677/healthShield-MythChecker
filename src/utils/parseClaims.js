@@ -4,21 +4,25 @@ import { splitAlternativeClaims } from './normalizeClaim.js';
 /**
  * Converts Google Apps Script records into the format
  * expected by the HealthShield AI frontend.
+ *
+ * Matches the existing Apps Script response:
+ * id, category, myth, fact, explanation,
+ * keywords, source, sourceUrl
  */
 function cleanRecord(raw) {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
 
-  // Support both the current Google Sheet fields and older API fields.
-  const claim = String(raw.claim || raw.myth || '').trim();
+  // Apps Script returns "myth", not "claim".
+  const claim = String(raw.myth || raw.claim || '').trim();
   const explanation = String(raw.explanation || '').trim();
 
+  // Apps Script returns fact as "TRUE" or "FALSE".
   const rawFact = String(
     raw.fact ?? raw.verdict ?? ''
   ).trim().toUpperCase();
 
-  // Convert Google Sheet true/false into FACT/MYTH.
   let verdict;
 
   if (rawFact === 'TRUE' || rawFact === 'FACT') {
@@ -26,7 +30,6 @@ function cleanRecord(raw) {
   } else if (rawFact === 'FALSE' || rawFact === 'MYTH') {
     verdict = 'MYTH';
   } else {
-    // Never guess when the spreadsheet value is invalid.
     return null;
   }
 
@@ -34,40 +37,56 @@ function cleanRecord(raw) {
     return null;
   }
 
+  // Apps Script returns "source" and "sourceUrl".
   const source = String(
-    raw.sourceName || raw.source || ''
+    raw.source || raw.sourceName || ''
   ).trim();
 
-  const sourceUrl = String(
-    raw.sourceUrl || (
-      /^https:\/\//i.test(String(raw.source || '').trim())
-        ? raw.source
-        : ''
-    )
-  ).trim();
+  const rawSourceUrl = String(raw.sourceUrl || '').trim();
 
-  // Reject invalid non-empty URLs.
-  if (sourceUrl && !/^https:\/\//i.test(sourceUrl)) {
-    return null;
+  // Keep the claim even if its URL is missing or invalid.
+  let sourceUrl = '';
+
+  if (rawSourceUrl) {
+    try {
+      const url = new URL(rawSourceUrl);
+
+      if (url.protocol === 'https:') {
+        sourceUrl = url.href;
+      }
+    } catch {
+      sourceUrl = '';
+    }
   }
 
-  const keywords = Array.isArray(raw.keywords)
+  // Apps Script returns keywords as an array.
+  const parsedKeywords = Array.isArray(raw.keywords)
     ? raw.keywords
-    : splitAlternativeClaims(raw.keywords);
+    : splitAlternativeClaims(raw.keywords || '');
 
-  const alternativeClaims = Array.isArray(raw.alternativeClaims)
-    ? raw.alternativeClaims
+  const keywords = Array.isArray(parsedKeywords)
+    ? parsedKeywords
         .map((item) => String(item).trim())
         .filter(Boolean)
-    : splitAlternativeClaims(raw.alternativeClaims);
+    : [];
+
+  // Alternative claims are optional and aren't returned
+  // by the current Apps Script.
+  const parsedAlternatives = Array.isArray(raw.alternativeClaims)
+    ? raw.alternativeClaims
+    : splitAlternativeClaims(raw.alternativeClaims || '');
+
+  const alternativeClaims = Array.isArray(parsedAlternatives)
+    ? parsedAlternatives
+        .map((item) => String(item).trim())
+        .filter(Boolean)
+    : [];
 
   return {
     id: String(raw.id || raw.Myth_ID || claim),
     claim,
     alternativeClaims,
-    keywords: keywords
-      .map((item) => String(item).trim())
-      .filter(Boolean),
+    keywords,
     category: String(raw.category || 'General').trim() || 'General',
     verdict,
     explanation,
@@ -77,6 +96,9 @@ function cleanRecord(raw) {
   };
 }
 
+/**
+ * Validates and normalizes the Apps Script response.
+ */
 export function parseClaimsResponse(payload) {
   if (!payload || typeof payload !== 'object') {
     throw new Error('The health list did not look like JSON.');
@@ -92,7 +114,9 @@ export function parseClaimsResponse(payload) {
     throw new Error('The health list was missing claims.');
   }
 
-  const claims = payload.claims.map(cleanRecord).filter(Boolean);
+  const claims = payload.claims
+    .map(cleanRecord)
+    .filter(Boolean);
 
   if (claims.length === 0 && payload.claims.length > 0) {
     throw new Error(
